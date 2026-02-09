@@ -35,34 +35,66 @@ Construct a URL with a natural language `?q=` parameter. Loads results directly 
 https://www.google.com/travel/flights?q=Flights+from+{ORIGIN}+to+{DEST}+on+{DATE}[+returning+{DATE}][+one+way][+business+class][+N+passengers]
 ```
 
-### Examples
+### Default: Economy + Business Comparison
 
-**Round trip (most common):**
+**Always run two parallel sessions** — economy and business — to show the price delta. This adds no extra time since both load concurrently.
+
 ```bash
-agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27"
+# Launch both in parallel (background the first)
+agent-browser --session econ open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27" &
+agent-browser --session biz open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27+business+class" &
+wait
+
+# Wait for both to load
+agent-browser --session econ wait --load networkidle &
+agent-browser --session biz wait --load networkidle &
+wait
+
+# Snapshot both
+agent-browser --session econ snapshot -i
+agent-browser --session biz snapshot -i
+
+# Close both
+agent-browser --session econ close &
+agent-browser --session biz close &
+wait
+```
+
+Then present results with a **business class delta column**:
+
+| # | Airline | Route | Duration | Stops | Economy | Business | Delta |
+|---|---------|-------|----------|-------|---------|----------|-------|
+| 1 | JAL | BKK-NRT | 5h 55m | Nonstop | THB 23,255 | THB 65,915 | +THB 42,660 (+183%) |
+| 2 | ANA | BKK-NRT | 5h 55m | Nonstop | THB 35,255 | — | N/A |
+| 3 | THAI | BKK-NRT | 5h 50m | Nonstop | THB 28,165 | — | N/A |
+
+**Matching logic**: Match flights by airline name and departure time. Not all economy flights have a business equivalent (budget carriers like ZIPAIR, Air Japan don't offer business). Show "—" when no business match exists.
+
+**Tip**: When an airline appears in business results but not economy (e.g., Philippine Airlines), it may operate business-only pricing on that route. Include it in the table with "—" for economy.
+
+### One Way with Business Delta
+
+Same pattern — just add `+one+way` to both URLs:
+
+```bash
+agent-browser --session econ open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way" &
+agent-browser --session biz open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way+business+class" &
+wait
+```
+
+### When User Asks for Business Only
+
+If the user specifically asks for business class (not a comparison), run just the business session:
+
+```bash
+agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+JFK+to+CDG+on+2026-06-01+returning+2026-06-15+business+class"
 agent-browser --session flights wait --load networkidle
 agent-browser --session flights snapshot -i
-# Parse link elements → present as table → close
 agent-browser --session flights close
 ```
 
-**One way:**
-```bash
-agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way"
-agent-browser --session flights wait --load networkidle
-agent-browser --session flights snapshot -i
-agent-browser --session flights close
-```
+### First Class / Multiple Passengers
 
-**Business class, 2 passengers:**
-```bash
-agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+JFK+to+CDG+on+2026-06-01+returning+2026-06-15+business+class+2+passengers"
-agent-browser --session flights wait --load networkidle
-agent-browser --session flights snapshot -i
-agent-browser --session flights close
-```
-
-**First class, adults + children:**
 ```bash
 agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+JFK+to+CDG+on+2026-06-01+returning+2026-06-15+first+class+2+adults+1+child"
 agent-browser --session flights wait --load networkidle
@@ -105,14 +137,16 @@ link "From 20508 Thai baht round trip total. Nonstop flight with Air Japan.
      Total duration 6 hr 5 min. Select flight"
 ```
 
-Parse into a markdown table:
+Parse economy + business snapshots into a **combined table with delta**:
 
-| # | Airline | Departure | Arrival | Duration | Stops | Price |
-|---|---------|-----------|---------|----------|-------|-------|
-| 1 | Air Japan | 12:10 AM | 8:15 AM | 6h 05m | Nonstop | THB 20,508 |
-| 2 | ZIPAIR Tokyo | 11:45 PM | 7:30 AM+1 | 5h 45m | Nonstop | THB 21,418 |
+| # | Airline | Dep | Arr | Duration | Stops | Economy | Business | Biz Delta |
+|---|---------|-----|-----|----------|-------|---------|----------|-----------|
+| 1 | JAL | 8:05 AM | 4:00 PM | 5h 55m | Nonstop | THB 23,255 | THB 65,915 | +THB 42,660 (+183%) |
+| 2 | THAI | 10:30 PM | 6:20 AM+1 | 5h 50m | Nonstop | THB 28,165 | THB 75,000 | +THB 46,835 (+166%) |
+| 3 | Air Japan | 12:10 AM | 8:15 AM | 6h 05m | Nonstop | THB 20,515 | — | — |
+| 4 | ZIPAIR | 11:45 PM | 7:30 AM+1 | 5h 45m | Nonstop | THB 21,425 | — | — |
 
-Include: airline, times, duration, stops (with layover airports), price, and "Best"/"Cheapest" labels.
+**Matching**: Pair economy and business results by airline + departure time. Budget carriers without business class show "—". Include "Best"/"Cheapest" labels from Google when present.
 
 ## Interactive Workflow (Fallback)
 
