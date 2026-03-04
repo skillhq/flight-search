@@ -1,14 +1,14 @@
 # ✈️ flight-search
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Claude Code Skill](https://img.shields.io/badge/Claude_Code-Skill-blueviolet)](https://claude.com/claude-code)
+[![Agent Skill](https://img.shields.io/badge/Agent-Skill-blueviolet)](https://skills.sh)
 
-Google Flights search skill for [Claude Code](https://claude.com/claude-code). Find flight prices, compare cabins, and get booking links — all from your terminal.
+Google Flights search skill for any coding agent — Claude Code, Codex, and more. Find flight prices, compare cabins, and get booking links from your terminal.
 
 ## Install
 
 ```bash
-claude skill add skillhq/flight-search
+npx skills add https://github.com/skillhq/flight-search --skill google-flights
 ```
 
 ## Triggers
