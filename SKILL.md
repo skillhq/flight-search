@@ -17,13 +17,15 @@ Search Google Flights via agent-browser to find flight prices, schedules, and av
 
 ## When NOT to Use
 
-- **Booking flights**: This skill searches only. Do not attempt to complete a purchase.
+- **Completing purchases**: This skill finds flights and extracts booking links, but do not attempt to complete a purchase on a booking site.
 - **Hotels/rental cars**: Use other tools for non-flight travel searches.
 - **Historical price data**: Google Flights shows current prices, not historical.
 
 ## Session Convention
 
-Always use `--session flights` for isolation.
+- **Economy + Business comparison** (default): `--session econ` and `--session biz`
+- **Single cabin search**: `--session flights`
+- **Interactive fallback**: `--session flights`
 
 ## Fast Path: URL-Based Search (Preferred)
 
@@ -54,10 +56,8 @@ wait
 agent-browser --session econ snapshot -i
 agent-browser --session biz snapshot -i
 
-# Close both
-agent-browser --session econ close &
-agent-browser --session biz close &
-wait
+# Close biz (only needed for delta column); keep econ alive for booking links
+agent-browser --session biz close
 ```
 
 Then present results with a **business class delta column**:
@@ -90,7 +90,7 @@ If the user specifically asks for business class (not a comparison), run just th
 agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+JFK+to+CDG+on+2026-06-01+returning+2026-06-15+business+class"
 agent-browser --session flights wait --load networkidle
 agent-browser --session flights snapshot -i
-agent-browser --session flights close
+# Keep session alive for booking links
 ```
 
 ### First Class / Multiple Passengers
@@ -99,7 +99,7 @@ agent-browser --session flights close
 agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+JFK+to+CDG+on+2026-06-01+returning+2026-06-15+first+class+2+adults+1+child"
 agent-browser --session flights wait --load networkidle
 agent-browser --session flights snapshot -i
-agent-browser --session flights close
+# Keep session alive for booking links
 ```
 
 ### What Works via URL
@@ -147,6 +147,48 @@ Parse economy + business snapshots into a **combined table with delta**:
 | 4 | ZIPAIR | 11:45 PM | 7:30 AM+1 | 5h 45m | Nonstop | THB 21,425 | — | — |
 
 **Matching**: Pair economy and business results by airline + departure time. Budget carriers without business class show "—". Include "Best"/"Cheapest" labels from Google when present.
+
+## Booking Options Handoff
+
+After presenting the results table, **always offer booking links**: "Want booking links for any of these? Just say which one."
+
+When the user picks a flight, extract booking options by clicking the flight's `link` element in the snapshot. Google Flights shows a panel with booking providers (airlines, OTAs) each with a price and a "Continue" link to the booking site.
+
+### Workflow
+
+```bash
+# User picks flight #N — click the corresponding link from the results snapshot
+agent-browser --session econ click @eN
+agent-browser --session econ wait 3000
+agent-browser --session econ snapshot -i
+```
+
+The booking panel snapshot will show `link` elements like:
+
+```
+link "Book with Emirates THB 28,960" → href="https://..."
+link "Book with Booking.com THB 29,512" → href="https://..."
+link "Book with Teaflight THB 28,171" → href="https://..."
+```
+
+Extract the provider name, price, and `href` URL from each link.
+
+### Output Format
+
+```
+📋 Booking Options for JAL BKK→NRT (5h 55m, Nonstop)
+
+| Provider | Price | Book |
+|----------|-------|------|
+| Emirates | THB 28,960 | [Continue](https://...) |
+| Booking.com | THB 29,512 | [Continue](https://...) |
+| Teaflight | THB 28,171 | [Continue](https://...) |
+```
+
+### Notes
+
+- **Session lifecycle**: Keep the results session alive for booking links; close `--session biz` immediately (only needed for delta). Close the results session after the user gets booking links or declines.
+- **If booking panel fails to load**: Re-snapshot and wait longer before retrying.
 
 ## Interactive Workflow (Fallback)
 
@@ -232,7 +274,7 @@ agent-browser --session flights snapshot -i
 agent-browser --session flights click @eN   # "Search" button
 agent-browser --session flights wait --load networkidle
 agent-browser --session flights snapshot -i
-agent-browser --session flights close
+# Keep session alive for booking links
 ```
 
 ### Multi-City Specifics
@@ -258,6 +300,8 @@ Fill each leg's destination + date in order, then click "Search".
 | Always CLICK suggestions, never Enter | Enter is unreliable for autocomplete |
 | Re-snapshot after every interaction | DOM changes invalidate refs |
 | "Done" ≠ Search | Calendar Done only closes picker |
+| After presenting results, offer booking links | Users almost always want to book — prompt them |
+| Keep results session alive; close `biz` after results | Results session needed for booking clicks; biz only for delta |
 
 ## Troubleshooting
 
