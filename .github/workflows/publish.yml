@@ -22,11 +22,20 @@ jobs:
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
 
+      - name: Get current version and bump patch
+        id: version
+        run: |
+          CURRENT=$(clawhub inspect flight-search-fast 2>/dev/null | grep "^Latest:" | awk '{print $2}' || echo "1.0.0")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
       - name: Publish
         run: |
           CHANGELOG=$(git log -1 --pretty=%B)
-          clawhub sync \
-            --all \
-            --bump patch \
+          clawhub publish . \
+            --slug flight-search-fast \
+            --name "Google Flights" \
+            --version "${{ steps.version.outputs.next }}" \
             --changelog "${CHANGELOG}" \
             --tags latest
