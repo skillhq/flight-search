@@ -1,0 +1,32 @@
+name: Publish to ClawHub
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install ClawHub CLI
+        run: npm install -g clawhub
+
+      - name: Authenticate
+        run: clawhub login --token "$CLAWHUB_TOKEN" --no-browser
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+
+      - name: Publish
+        run: |
+          CHANGELOG=$(git log -1 --pretty=%B)
+          clawhub sync \
+            --all \
+            --bump patch \
+            --changelog "${CHANGELOG}" \
+            --tags latest
