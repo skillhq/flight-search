@@ -60,17 +60,11 @@ agent-browser --session biz snapshot -i
 agent-browser --session biz close
 ```
 
-Then present results with a **business class delta column**:
-
-| # | Airline | Route | Duration | Stops | Economy | Business | Delta |
-|---|---------|-------|----------|-------|---------|----------|-------|
-| 1 | JAL | BKK-NRT | 5h 55m | Nonstop | THB 23,255 | THB 65,915 | +THB 42,660 (+183%) |
-| 2 | ANA | BKK-NRT | 5h 55m | Nonstop | THB 35,255 | — | N/A |
-| 3 | THAI | BKK-NRT | 5h 50m | Nonstop | THB 28,165 | — | N/A |
+Then present results in **compact list format** (see Output Format section below).
 
 **Matching logic**: Match flights by airline name and departure time. Not all economy flights have a business equivalent (budget carriers like ZIPAIR, Air Japan don't offer business). Show "—" when no business match exists.
 
-**Tip**: When an airline appears in business results but not economy (e.g., Philippine Airlines), it may operate business-only pricing on that route. Include it in the table with "—" for economy.
+**Tip**: When an airline appears in business results but not economy (e.g., Philippine Airlines), it may operate business-only pricing on that route. Include it with "—" for economy.
 
 ### One Way with Business Delta
 
@@ -137,14 +131,25 @@ link "From 20508 Thai baht round trip total. Nonstop flight with Air Japan.
      Total duration 6 hr 5 min. Select flight"
 ```
 
-Parse economy + business snapshots into a **combined table with delta**:
+Parse economy + business snapshots into the **compact list format**:
 
-| # | Airline | Dep | Arr | Duration | Stops | Economy | Business | Biz Delta |
-|---|---------|-----|-----|----------|-------|---------|----------|-----------|
-| 1 | JAL | 8:05 AM | 4:00 PM | 5h 55m | Nonstop | THB 23,255 | THB 65,915 | +THB 42,660 (+183%) |
-| 2 | THAI | 10:30 PM | 6:20 AM+1 | 5h 50m | Nonstop | THB 28,165 | THB 75,000 | +THB 46,835 (+166%) |
-| 3 | Air Japan | 12:10 AM | 8:15 AM | 6h 05m | Nonstop | THB 20,515 | — | — |
-| 4 | ZIPAIR | 11:45 PM | 7:30 AM+1 | 5h 45m | Nonstop | THB 21,425 | — | — |
+```
+1. JAL — Nonstop · 5h 55m
+   8:05 AM → 4:00 PM
+   Economy: THB 23,255 · Business: THB 65,915 (+183%)
+
+2. THAI — Nonstop · 5h 50m
+   10:30 PM → 6:20 AM+1
+   Economy: THB 28,165 · Business: THB 75,000 (+166%)
+
+3. Air Japan — Nonstop · 6h 05m
+   12:10 AM → 8:15 AM
+   Economy: THB 20,515 · Business: —
+
+4. ZIPAIR — Nonstop · 5h 45m
+   11:45 PM → 7:30 AM+1
+   Economy: THB 21,425 · Business: —
+```
 
 **Matching**: Pair economy and business results by airline + departure time. Budget carriers without business class show "—". Include "Best"/"Cheapest" labels from Google when present.
 
@@ -288,6 +293,45 @@ After selecting "Multi-city" trip type, the form shows one row per leg:
 - Results show flights for the **first leg**, with prices reflecting the **total multi-city cost**
 
 Fill each leg's destination + date in order, then click "Search".
+
+## Output Format
+
+**Always use compact list format** — never markdown tables. Output is typically displayed in chatbot interfaces (Telegram, etc.) where tables render poorly.
+
+### Economy + Business comparison (default)
+
+```
+1. JAL — Nonstop · 5h 55m
+   8:05 AM → 4:00 PM
+   Economy: THB 23,255 · Business: THB 65,915 (+183%)
+
+2. THAI — Nonstop · 5h 50m
+   10:30 PM → 6:20 AM+1
+   Economy: THB 28,165 · Business: THB 75,000 (+166%)
+
+3. Air Japan — Nonstop · 6h 05m
+   12:10 AM → 8:15 AM
+   Economy: THB 20,515 · Business: —
+```
+
+### Economy only
+
+```
+1. JAL — Nonstop · 5h 55m
+   8:05 AM → 4:00 PM · THB 23,255
+
+2. THAI — Nonstop · 5h 50m
+   10:30 PM → 6:20 AM+1 · THB 28,165
+```
+
+### Format rules
+
+- One flight per numbered block, blank line between flights
+- Line 1: Airline — Stops · Duration
+- Line 2: Departure → Arrival times
+- Line 3: Prices (economy, business delta if applicable)
+- No code blocks around the flight list — plain text reads best
+- Keep the "Best value" recommendation as a plain text paragraph after the list
 
 ## Key Rules
 
