@@ -23,9 +23,24 @@ Search Google Flights via agent-browser to find flight prices, schedules, and av
 
 ## Session Convention
 
-- **Economy + Business comparison** (default): `--session econ` and `--session biz`
-- **Single cabin search**: `--session flights`
+- **Economy only** (default for domestic): `--session flights`
+- **Economy + Business comparison** (international or user requests): `--session econ` and `--session biz`
 - **Interactive fallback**: `--session flights`
+
+## Domestic vs International Detection
+
+**Domestic flights default to economy only.** Business class on US domestic routes is typically 3-5x the price and rarely worth showing unless asked.
+
+A flight is **domestic** if both origin and destination are US airports. Common US IATA codes: ATL, BOS, BWI, CLT, DEN, DFW, DTW, EWR, FLL, HNL, IAD, IAH, JFK, LAS, LAX, LGA, MCO, MDW, MIA, MSP, OAK, ORD, PHL, PHX, PDX, SAN, SEA, SFO, SJC, SLC, TPA.
+
+**When to show business class:**
+- International flights (always show economy + business comparison)
+- User explicitly asks for "business class" or "business"
+- User asks to "compare cabins" or "show all classes"
+
+**When to skip business class:**
+- Domestic US flights (economy only by default)
+- User explicitly asks for "economy" or "cheapest"
 
 ## Fast Path: URL-Based Search (Preferred)
 
@@ -37,42 +52,55 @@ Construct a URL with a natural language `?q=` parameter. Loads results directly 
 https://www.google.com/travel/flights?q=Flights+from+{ORIGIN}+to+{DEST}+on+{DATE}[+returning+{DATE}][+one+way][+business+class][+N+passengers]
 ```
 
-### Default: Economy + Business Comparison
+### Default: Economy Only (Domestic)
 
-**Always run two parallel sessions** — economy and business — to show the price delta. This adds no extra time since both load concurrently.
+For domestic flights, run a single session - **2 tool calls total**:
 
 ```bash
-# Launch both in parallel (background the first)
-agent-browser --session econ open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27" &
-agent-browser --session biz open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27+business+class" &
-wait
+# Open and wait in one call
+agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+MIA+to+SFO+on+2026-04-28+returning+2026-04-30" && agent-browser --session flights wait --load networkidle
 
-# Wait for both to load
-agent-browser --session econ wait --load networkidle &
-agent-browser --session biz wait --load networkidle &
-wait
-
-# Snapshot both
-agent-browser --session econ snapshot -i
-agent-browser --session biz snapshot -i
-
-# Close biz (only needed for delta column); keep econ alive for booking links
-agent-browser --session biz close
+# Snapshot results
+agent-browser --session flights snapshot -i
+# Keep session alive for booking links
 ```
 
 Then present results in **compact list format** (see Output Format section below).
 
-**Matching logic**: Match flights by airline name and departure time. Not all economy flights have a business equivalent (budget carriers like ZIPAIR, Air Japan don't offer business). Show "—" when no business match exists.
+### Economy + Business Comparison (International)
 
-**Tip**: When an airline appears in business results but not economy (e.g., Philippine Airlines), it may operate business-only pricing on that route. Include it with "—" for economy.
-
-### One Way with Business Delta
-
-Same pattern — just add `+one+way` to both URLs:
+For international flights, run two parallel sessions to show the price delta:
 
 ```bash
-agent-browser --session econ open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way" &
-agent-browser --session biz open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way+business+class" &
+# Open both and wait in parallel
+(agent-browser --session econ open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27" && agent-browser --session econ wait --load networkidle) &
+(agent-browser --session biz open "https://www.google.com/travel/flights?q=Flights+from+BKK+to+NRT+on+2026-03-20+returning+2026-03-27+business+class" && agent-browser --session biz wait --load networkidle) &
+wait
+
+# Snapshot both in parallel
+agent-browser --session econ snapshot -i &
+agent-browser --session biz snapshot -i &
+wait
+
+# Close biz (only needed for delta); keep econ alive for booking links
+agent-browser --session biz close
+```
+
+**Matching logic**: Match flights by airline name and departure time. Not all economy flights have a business equivalent (budget carriers like ZIPAIR, Air Japan don't offer business). Show "-" when no business match exists.
+
+**Tip**: When an airline appears in business results but not economy (e.g., Philippine Airlines), it may operate business-only pricing on that route. Include it with "-" for economy.
+
+### One Way
+
+Add `+one+way` to the URL. For international, run both economy and business in parallel:
+
+```bash
+# Domestic (economy only)
+agent-browser --session flights open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+JFK+on+2026-04-15+one+way" && agent-browser --session flights wait --load networkidle
+
+# International (economy + business comparison)
+(agent-browser --session econ open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way" && agent-browser --session econ wait --load networkidle) &
+(agent-browser --session biz open "https://www.google.com/travel/flights?q=Flights+from+LAX+to+LHR+on+2026-04-15+one+way+business+class" && agent-browser --session biz wait --load networkidle) &
 wait
 ```
 
@@ -163,9 +191,10 @@ When the user picks a flight, extract booking options by clicking the flight's `
 
 ```bash
 # User picks flight #N — click the corresponding link from the results snapshot
-agent-browser --session econ click @eN
-agent-browser --session econ wait 3000
-agent-browser --session econ snapshot -i
+# Use --session flights (domestic) or --session econ (international comparison)
+agent-browser --session flights click @eN
+agent-browser --session flights wait 3000
+agent-browser --session flights snapshot -i
 ```
 
 The booking panel snapshot will show `link` elements like:
@@ -192,7 +221,7 @@ Extract the provider name, price, and `href` URL from each link.
 
 ### Notes
 
-- **Session lifecycle**: Keep the results session alive for booking links; close `--session biz` immediately (only needed for delta). Close the results session after the user gets booking links or declines.
+- **Session lifecycle**: Keep the results session (`flights` or `econ`) alive for booking links. For international comparisons, close `--session biz` immediately after extracting prices. Close the results session after the user gets booking links or declines.
 - **If booking panel fails to load**: Re-snapshot and wait longer before retrying.
 
 ## Interactive Workflow (Fallback)
@@ -337,14 +366,17 @@ Fill each leg's destination + date in order, then click "Search".
 
 | Rule | Why |
 |------|-----|
-| Prefer URL fast path | 3 commands vs 15+ interactive |
-| `wait --load networkidle` | Smarter than fixed `wait 5000` — returns when network settles |
+| Prefer URL fast path | 2 tool calls (domestic) or 3 (international) vs 15+ interactive |
+| Chain open+wait with `&&` | Eliminates a round-trip between tool calls |
+| Skip business for domestic | US domestic business is 3-5x price, rarely useful unless asked |
+| Parallel snapshots with `&` + `wait` | Both snapshots run concurrently for international |
+| `wait --load networkidle` | Smarter than fixed `wait 5000` - returns when network settles |
 | Use `fill` not `type` for airports | Clears existing text first |
 | Wait 2s after typing airport codes | Autocomplete needs API roundtrip |
 | Always CLICK suggestions, never Enter | Enter is unreliable for autocomplete |
 | Re-snapshot after every interaction | DOM changes invalidate refs |
 | "Done" ≠ Search | Calendar Done only closes picker |
-| After presenting results, offer booking links | Users almost always want to book — prompt them |
+| After presenting results, offer booking links | Users almost always want to book - prompt them |
 | Keep results session alive; close `biz` after results | Results session needed for booking clicks; biz only for delta |
 
 ## Troubleshooting
